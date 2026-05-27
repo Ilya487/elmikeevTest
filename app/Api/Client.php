@@ -2,7 +2,7 @@
 
 namespace App\Api;
 
-use Exception;
+use App\Exceptions\Api\RetrievePageException;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Support\Facades\Http;
 
@@ -22,39 +22,45 @@ abstract class Client
         $page = $startPage;
         $lastPage = null;
 
-        while (true) {
-            echo "Page $page\n";
-            $dataChunk = [];
+        try {
+            while (true) {
+                echo "Page $page\n";
+                $dataChunk = [];
 
-            $endPage = $lastPage == null
-                ? $page + $requestPerTime - 1
-                : min($page + $requestPerTime - 1, $lastPage);
-            $queryParams = $this->genereateQueryParamsForBatchRequests(range($page, $endPage), $limitPerRequest);
+                $endPage = $lastPage == null
+                    ? $page + $requestPerTime - 1
+                    : min($page + $requestPerTime - 1, $lastPage);
+                $queryParams = $this->genereateQueryParamsForBatchRequests(range($page, $endPage), $limitPerRequest);
 
-            $responses = $this->batchRequest($this->url, $queryParams);
-            $responses = $this->handleToManyAttemptsResponse($responses,  $limitPerRequest);
+                $responses = $this->batchRequest($this->url, $queryParams);
+                $responses = $this->handleToManyAttemptsResponse($responses,  $limitPerRequest);
 
-            $emptyPages = 0;
-            foreach ($responses as $response) {
-                if ($lastPage === null) {
-                    $lastPage = $this->getDataFromResponse($response, 'meta.last_page');
+                $emptyPages = 0;
+                foreach ($responses as $response) {
+                    if ($lastPage === null) {
+                        $lastPage = $this->getDataFromResponse($response, 'meta.last_page');
+                    }
+                    $data = $this->getDataFromResponse($response, 'data');
+                    if (empty($data)) {
+                        $emptyPages++;
+                        continue;
+                    }
+
+                    $dataChunk = array_merge($dataChunk, $data);
                 }
-                $data = $this->getDataFromResponse($response, 'data');
-                if (empty($data)) {
-                    $emptyPages++;
-                    continue;
+
+                if (!empty($dataChunk)) yield $dataChunk;
+
+                if ($lastPage !== null && $endPage >= $lastPage) {
+                    break;
                 }
 
-                $dataChunk = array_merge($dataChunk, $data);
+                $page = $endPage + 1;
             }
-
-            if (!empty($dataChunk)) yield $dataChunk;
-
-            if ($lastPage !== null && $endPage >= $lastPage) {
-                break;
-            }
-
-            $page = $endPage + 1;
+        } catch (\Throwable $th) {
+            if (!empty($dataChunk))
+                yield $dataChunk;
+            throw $th;
         }
     }
 
@@ -139,7 +145,7 @@ abstract class Client
             $response->dumpHeaders();
             parse_str($response->effectiveUri()->getQuery(), $queryParams);
             $pageNum = $queryParams['page'];
-            throw new Exception('Failed get data from page ' . $pageNum);
+            throw new RetrievePageException($pageNum);
         }
 
         return $response->json($key);
