@@ -20,12 +20,15 @@ abstract class Client
     public function getAll(int $startPage, int $requestPerTime,   int $limitPerRequest = 500)
     {
         $page = $startPage;
+        $lastPage = null;
 
         while (true) {
             echo "Page $page\n";
             $dataChunk = [];
 
-            $endPage = $page + $requestPerTime - 1;
+            $endPage = $lastPage == null
+                ? $page + $requestPerTime - 1
+                : min($page + $requestPerTime - 1, $lastPage);
             $queryParams = $this->genereateQueryParamsForBatchRequests(range($page, $endPage), $limitPerRequest);
 
             $responses = $this->batchRequest($this->url, $queryParams);
@@ -33,7 +36,10 @@ abstract class Client
 
             $emptyPages = 0;
             foreach ($responses as $response) {
-                $data = $this->extractDataFromResponse($response);
+                if ($lastPage === null) {
+                    $lastPage = $this->getDataFromResponse($response, 'meta.last_page');
+                }
+                $data = $this->getDataFromResponse($response, 'data');
                 if (empty($data)) {
                     $emptyPages++;
                     continue;
@@ -42,9 +48,13 @@ abstract class Client
                 $dataChunk = array_merge($dataChunk, $data);
             }
 
+            if (!empty($dataChunk)) yield $dataChunk;
+
+            if ($lastPage !== null && $endPage >= $lastPage) {
+                break;
+            }
+
             $page = $endPage + 1;
-            if ($emptyPages == count($responses)) break;
-            yield $dataChunk;
         }
     }
 
@@ -122,15 +132,16 @@ abstract class Client
         return $responses;
     }
 
-    private function extractDataFromResponse(\Illuminate\Http\Client\Response|\Throwable $response)
+    private function getDataFromResponse(\Illuminate\Http\Client\Response|\Throwable $response, string $key)
     {
         if ($response->failed()) {
             dump($response->status());
             $response->dumpHeaders();
             parse_str($response->effectiveUri()->getQuery(), $queryParams);
-            throw new Exception('Failed get data from page ' . $queryParams['page']);
+            $pageNum = $queryParams['page'];
+            throw new Exception('Failed get data from page ' . $pageNum);
         }
 
-        return $response->json('data');
+        return $response->json($key);
     }
 }
