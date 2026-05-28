@@ -11,10 +11,10 @@ abstract class Client
     private readonly string $url;
     private readonly string $apiKey;
 
-    public function __construct()
+    public function __construct(ApiConfig $config)
     {
-        $this->url = env('API_HOST') . '/' . $this->getEntityName();
-        $this->apiKey = env('API_KEY');
+        $this->url = $config->baseUrl;
+        $this->apiKey = $config->apiKey;
     }
 
     public function getAll(int $startPage, int $requestPerTime,   int $limitPerRequest = 500)

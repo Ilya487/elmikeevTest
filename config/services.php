@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'api' => [
+        'host' => env('API_HOST'),
+        'key' => env('API_KEY'),
+    ]
 ];
