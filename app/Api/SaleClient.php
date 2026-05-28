@@ -2,7 +2,7 @@
 
 namespace App\Api;
 
-class SalesClient extends Client
+class SaleClient extends Client
 {
     protected function getEntityName(): string
     {

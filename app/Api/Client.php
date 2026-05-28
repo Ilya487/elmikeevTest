@@ -13,7 +13,7 @@ abstract class Client
 
     public function __construct(ApiConfig $config)
     {
-        $this->url = $config->baseUrl;
+        $this->url = "{$config->baseUrl}/{$this->getEntityName()}";
         $this->apiKey = $config->apiKey;
     }
 
